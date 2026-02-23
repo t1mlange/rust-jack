@@ -202,11 +202,15 @@ impl Transport {
     }
 
     fn with_client<F: Fn(*mut j::jack_client_t) -> R, R>(&self, func: F) -> Result<R> {
-        if self.client_life.upgrade().is_some() {
-            Ok(func(self.client_ptr))
-        } else {
-            Err(crate::Error::ClientIsNoLongerAlive)
-        }
+        self.client_life.upgrade()
+            .ok_or(crate::Error::ClientIsNoLongerAlive)
+            .and_then(|_arc| Ok(func(self.client_ptr)))
+
+        // if let Some(_strong_ref) = self.client_life.upgrade().map(|arc| DropNotifier(arc)) {
+        //     Ok(func(self.client_ptr))
+        // } else {
+        //     Err(crate::Error::ClientIsNoLongerAlive)
+        // }
     }
 
     // Helper to create generic error from jack response
@@ -216,6 +220,14 @@ impl Transport {
             Ok(error_code) => Err(crate::Error::UnknownError { error_code }),
             Err(e) => Err(e),
         }
+    }
+}
+
+struct DropNotifier<T>(T);
+
+impl<T> Drop for DropNotifier<T> {
+    fn drop(&mut self) {
+        println!("Dropping: {}", std::any::type_name::<T>());
     }
 }
 
